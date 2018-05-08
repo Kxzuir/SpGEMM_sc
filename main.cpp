@@ -20,16 +20,14 @@ int benchmark_spgemm(const char *datasetA, const char *datasetB)
 	sc_sparse->initData(n, m, p,
 		csrPtr(A.num_entries, &A.row_offsets[0], &A.column_indices[0], &A.values[0]),
 		csrPtr(B.num_entries, &B.row_offsets[0], &B.column_indices[0], &B.values[0]));
+	sc_sparse->warmup();
 	sc_sparse->spgemm();
 
 	csrPtr Cptr;
 	sc_sparse->getCptr(Cptr);
 
 	int checkRes = GeMMChecker::checkCSR(A, B, Cptr, true);
-	if (checkRes != 0)
-	{
-		fprintf(stderr, "Result mismatch!\n");
-	}
+	if (checkRes != 0) fprintf(stderr, "Result mismatch!\n");
 	
 	sc_sparse->freeMem();
 	return err;
@@ -41,6 +39,11 @@ int main(int argc, char *argv[])
 	int err = 0;
 	printHeader(APP_NAME, MAJOR_VERSION, MINOR_VERSION, CPRT_YEAR, AUTHOR);
 	
+	if (argc != 2)
+	{
+		printHelp(APP_NAME, "file", "Perform SpGeMM benchmark on matrix market file");
+		return 255;
+	}
 	printf("[AppFramework] Using arg = \"%s\"\n", argv[1]);
 	char *fileName = argv[1];
 	err = benchmark_spgemm(fileName, "");

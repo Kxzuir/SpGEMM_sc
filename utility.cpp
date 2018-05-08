@@ -23,6 +23,21 @@ void printHeader(const char *appName, int majorVer, int minorVer, int year, cons
 	printf("\n");
 }
 
+/*
+Usage:
+mkfs [options] [-t <type>] [fs-options] <device> [<size>]
+
+Make a Linux filesystem.
+
+*/
+
+void printHelp(char *appName, char *opts, char *info)
+{
+	printf("Usage:\n");
+	printf("%s %s\n\n", appName, opts);
+	printf("%s", info);
+}
+
 void printLine(int lineLen)
 {
 	for (int i = 0; i < lineLen; i++) printf("-");

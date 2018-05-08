@@ -42,14 +42,15 @@ public:
 #define HASHTABLESIZ 512
 
 #define INVALIDHASHIDX INT_MAX
-#define SD_HT_INS_ERR_HTFULL -1;
+#define SD_HT_INS_ERR_HTFULL (-1)
 
+#define EMPTYATTR 0
 #define CDATTR 1
 #define SDATTR 2
 
 #define APP_NAME "SpGEMM_SC"
 #define MAJOR_VERSION 2
-#define MINOR_VERSION 5
+#define MINOR_VERSION 6
 #define CPRT_YEAR 2018
 #define AUTHOR "BUPT GPU Architecture Study Group"
 #define CODER "Kxzuir"
@@ -88,5 +89,12 @@ Merge CDGroup kernels
 
 v2.5
 Optimize CDGroup speed by rewritten bitonic sort kernel
-Split CDGroup kernels again
+Split CDGroup kernels again (practice proves that v2.5 is a bad try)
+
+v2.6
+Add dynamic-size hash table support for SDGroup
+Add falldown mechanism for SDGroup rows (fall into CDGroup)
+Add memory management
+Add warmup function
+Code struct reconstruct
 */

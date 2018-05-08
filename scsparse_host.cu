@@ -9,12 +9,18 @@ scsparse::scsparse()
 
 int scsparse::initDevice(int deviceId, bool printInfo)
 {
+	if (_hasPFInited)
+	{
+		fprintf(stderr, "[InitDevice] Warning: Initialized device [%d] detected and will be replaced.\n", deviceId);
+		return 1;
+	}
+	_hasPFInited = false;
 	cudaSetDevice(deviceId);
 	cudaDeviceProp deviceProp;
 	cudaError_t cuErr = cudaGetDeviceProperties(&deviceProp, deviceId);
 	if (cuErr != cudaSuccess)
 	{
-		fprintf(stderr, "[initDevice] Error: Can not get CUDA info for Device [%d].\n", deviceId);
+		fprintf(stderr, "[InitDevice] Error: Can not get CUDA info for Device [%d].\n", deviceId);
 		return 1;
 	}
 	_deviceId = deviceId;
@@ -25,9 +31,9 @@ int scsparse::initDevice(int deviceId, bool printInfo)
 
 	if (printInfo)
 	{
-		printf("[initDevice] Info: Using device [%d] %s @ %.2f MHz (%d.%d).\n",
+		printf("[InitDevice] Info: Using device [%d] %s @ %.2f MHz (%d.%d).\n",
 			deviceId, deviceProp.name, deviceProp.clockRate * 1e-3f, deviceProp.major, deviceProp.minor);
-		printf("[initDevice] Info: %d SMXs, %d CUDA cores per SMX.\n", _num_smx, _num_cuda_cores_per_smx);
+		printf("[InitDevice] Info: %d SMXs, %d CUDA cores per SMX.\n", _num_smx, _num_cuda_cores_per_smx);
 	}
 	_hasPFInited = true;
 	return 0;
@@ -37,19 +43,17 @@ int scsparse::initDevice(int deviceId, bool printInfo)
 int scsparse::initData(int n, int m, int p, csrPtr Aptr, csrPtr Bptr, bool printInfo)
 {
 	int err = 0;
-	if (_hasPFInited == false) fprintf(stderr, "[initData] Warning: Device not initialized.\n");
+	if (!_hasPFInited)
+	{
+		fprintf(stderr, "[InitData] Error: Device not initialized.\n");
+		return err = 1;
+	}
+	if (_hasDataInited)
+	{
+		fprintf(stderr, "[InitData] Error: Data already loaded.\n");
+		return err = 2;
+	}
 
-	_spgemm_timer = NULL;
-	_stage1_timer = NULL;
-	_stage1_1_timer = NULL;
-	_stage1_2_timer = NULL;
-	_stage2_timer = NULL;
-	_stage2_1_timer = NULL;
-	_stage3_timer = NULL;
-	_stage3_1_timer = NULL;
-	_stage3_2_timer = NULL;
-	_stage4_timer = NULL;
-	_stage4_1_timer = NULL;
 	sdkCreateTimer(&_spgemm_timer);
 	sdkCreateTimer(&_stage1_timer);
 	sdkCreateTimer(&_stage1_1_timer);
@@ -83,15 +87,39 @@ int scsparse::initData(int n, int m, int p, csrPtr Aptr, csrPtr Bptr, bool print
 	checkCudaErrors(cudaMemcpy(_d_B.csrVal, _h_B.csrVal, _d_B.nnz * sizeof(value_t), cudaMemcpyHostToDevice));
 
 	_hasDataInited = true;
-	if (printInfo) printf("[initData] Info: n = %d, m = %d, p = %d, %d elements in total.\n", _n, _m, _p, _h_A.nnz);
-	printf("[initData] Matrix successfully loaded.\n");
+	if (printInfo) printf("[InitData] Info: n = %d, m = %d, p = %d, %d elements in total.\n", _n, _m, _p, _h_A.nnz);
+	printf("[InitData] Matrix successfully loaded.\n");
 	return err;
 }
 
+int scsparse::warmup(int times)
+{
+	int err = 0;
+	printf("[Warmup] Warming up");
+	for (int i = 0; i < times; i++)
+	{
+		compute_nnzRowCt_eigenRow(true);
+		printf(".");
+	}
+	printf("done.\n");
+	return err;
+}
 
 int scsparse::spgemm()
 {
 	int err = 0;
+	if (!_hasDataInited)
+	{
+		fprintf(stderr, "[SpGeMM] Error: Data not loaded.\n");
+		return err = 1;
+	}
+	if (_hasCalced)
+	{
+		fprintf(stderr, "[SpGeMM] Warning: Duplicated calculation detected.\n");
+		freeMem(false);
+		_hasCalced = false;
+	}
+
 	printf("[SpGeMM] Benchmark started.\n");
 	sdkStartTimer(&_spgemm_timer);
 	printLine();
@@ -133,7 +161,7 @@ int scsparse::spgemm()
 	else printf("done, in %.2f ms\n", sdkGetTimerValue(&_stage2_1_timer));
 
 	sdkStopTimer(&_stage2_timer);
-	printf("[SpGeMM] CDGSiz = %d, SDGSiz = %d\n", _CDRowCnt, _SDRowCnt);
+	printf("[SpGeMM] EmptyRow = %d, SDGSiz = %d, CDGSiz = %d\n", _emptyRowCnt, _SDRowCnt, _CDRowCnt);
 	printf("[SpGeMM] Stage 2/4 finished in %.2f ms.\n", sdkGetTimerValue(&_stage2_timer));
 	printLine();
 
@@ -148,7 +176,7 @@ int scsparse::spgemm()
 	err |= kernelBarrier();
 	sdkStopTimer(&_stage3_2_timer);
 	if (err) fprintf(stderr, "failed, error code = %d\n", err);
-	else printf("done, in %.2f ms\n", sdkGetTimerValue(&_stage3_2_timer));
+	else printf("done (%d rows dropped), in %.2f ms\n", _SDRowFailedCnt, sdkGetTimerValue(&_stage3_2_timer));
 
 	// STAGE 3 - STEP 2 : compute CD group
 	printf("computeCDGroup()...");
@@ -163,7 +191,7 @@ int scsparse::spgemm()
 	printf("[SpGeMM] Stage 3/4 finished in %.2f ms.\n", sdkGetTimerValue(&_stage3_timer));
 	printLine();
 
-	// STAGE 4: Merge Data
+	// STAGE 4: Conclude
 	printf("[SpGeMM] Stage 4/4: Conclude\n");
 	sdkStartTimer(&_stage4_timer);
 
@@ -180,6 +208,7 @@ int scsparse::spgemm()
 
 	sdkStopTimer(&_spgemm_timer);
 	printf("[SpGeMM] Benchmark finished in %.2f ms.\n", sdkGetTimerValue(&_spgemm_timer));
+	_hasCalced = true;
 	return err;
 }
 
@@ -188,7 +217,7 @@ int scsparse::kernelBarrier()
 	return cudaDeviceSynchronize();
 }
 
-int scsparse::compute_nnzRowCt_eigenRow()
+int scsparse::compute_nnzRowCt_eigenRow(bool isWarmup)
 {
 	int err = 0;
 
@@ -221,6 +250,14 @@ int scsparse::compute_nnzRowCt_eigenRow()
 	checkCudaErrors(cudaMemcpy(_h_nnzRowCt, _d_nnzRowCt, _n * sizeof(int), cudaMemcpyDeviceToHost));
 	checkCudaErrors(cudaMemcpy(_h_eigenRow, _d_eigenRow, _n * sizeof(double), cudaMemcpyDeviceToHost));
 
+	if (isWarmup)
+	{
+		checkCudaErrors(cudaFree(_d_nnzRowCt));
+		checkCudaErrors(cudaFree(_d_eigenRow));
+		free(_h_nnzRowCt);
+		free(_h_eigenRow);
+	}
+
 	return err;
 } 
 
@@ -236,31 +273,118 @@ int scsparse::computeAlpha()
 
 int scsparse::taskClassify()
 {
-	_h_rowAttr = (attr_t*)malloc(sizeof(attr_t) * _n);
-	_h_row2PoolIdx = (index_t*)malloc(sizeof(index_t) * _n);
-	std::vector<index_t> grtRowIdx, lesRowIdx;
-	_SDRowCnt = _CDRowCnt = 0;
-	int nnzCDTotal = 0;
 	for (int i = 0; i < _n; i++)
 	{
-		if (_h_eigenRow[i] <= _alpha)		
-		{
-			lesRowIdx.push_back(i);
-			_h_rowAttr[i] = SDATTR;
-			_h_row2PoolIdx[i] = _SDRowCnt++;
-		}
-		else
-		{
-			grtRowIdx.push_back(i);
-			_h_rowAttr[i] = CDATTR;
-			_h_row2PoolIdx[i] = _CDRowCnt++;
-			nnzCDTotal += _h_nnzRowCt[i];
-		}
+		if (_h_nnzRowCt[i] == 0) _emptyRowIdx.push_back(i);
+		else if (_h_eigenRow[i] <= _alpha) _lesRowIdx.push_back(i);
+		else _grtRowIdx.push_back(i);
 	}
-	//---------rearrange grtRowIdx------------------
+	_emptyRowCnt = _emptyRowIdx.size();
+	_SDRowCnt = _lesRowIdx.size();
+	_CDRowCnt = _grtRowIdx.size();
+	return 0;
+}
+
+
+int scsparse::computeSDGroup()
+{
+	int err = 0;
+	_SDEleTotal = 0;
+	if (_SDRowCnt == 0) return err;
+	_h_SDRowIdx = (index_t*)malloc(sizeof(index_t)*_SDRowCnt);
+	//_h_SDRowNNZ = (index_t*)malloc(sizeof(index_t)*_SDRowCnt);
+	memcpy(_h_SDRowIdx, &_lesRowIdx[0], _SDRowCnt * sizeof(index_t));
+	//for (int i = 0; i < _SDRowCnt; i++) _h_SDRowNNZ[i] = _h_nnzRowCt[_h_SDRowIdx[i]];
+	checkCudaErrors(cudaMalloc((void **)&_d_SDRowIdx, _SDRowCnt * sizeof(index_t)));
+	//checkCudaErrors(cudaMalloc((void **)&_d_SDRowNNZ, _SDRowCnt * sizeof(int)));
+	checkCudaErrors(cudaMemcpy(_d_SDRowIdx, _h_SDRowIdx, _SDRowCnt * sizeof(index_t), cudaMemcpyHostToDevice));
+	//checkCudaErrors(cudaMemcpy(_d_SDRowNNZ, _h_SDRowNNZ, _SDRowCnt * sizeof(int), cudaMemcpyHostToDevice));
+	//thrust::sort_by_key(tIntPtr_t(_d_SDRowNNZ), tIntPtr_t(_d_SDRowNNZ)+_SDRowCnt, tIntPtr_t(_d_SDRowIdx));
+	//checkCudaErrors(cudaMemcpy(_h_SDRowIdx, _d_SDRowIdx, _SDRowCnt * sizeof(index_t), cudaMemcpyDeviceToHost));
+	//checkCudaErrors(cudaMemcpy(_h_SDRowNNZ, _d_SDRowNNZ, _SDRowCnt * sizeof(int), cudaMemcpyDeviceToHost));
+
+// Group into different bins
+// In this version we simply alloc one pool of pre-defined size
+	_binNum = 1;
+	_h_binOfs = (int*)malloc(sizeof(int)*(_binNum + 1));
+	_h_binOfs[0] = 0, _h_binOfs[_binNum] = _SDRowCnt;
+// -----------------------------------------------------------
+
+	_h_htValidLen = (int*)malloc(sizeof(int) * _SDRowCnt);
+	_h_htOffset = (int*)malloc(sizeof(int) * _SDRowCnt);
+	checkCudaErrors(cudaMalloc((void**)&_d_htValidLen, sizeof(int) * _SDRowCnt));
+	checkCudaErrors(cudaMalloc((void**)&_d_htOffset, sizeof(int) * _SDRowCnt));
+
+	int htEndLoc = 0;
+	for (int i = 0; i < _SDRowCnt; i++)
+	{
+		_h_htOffset[i] = htEndLoc;
+		int absIdx = _h_SDRowIdx[i];
+		htEndLoc += _h_nnzRowCt[absIdx];
+	}
+	_htSize = htEndLoc;
+
+	checkCudaErrors(cudaMemcpy(_d_htOffset, _h_htOffset, sizeof(int)*_SDRowCnt, cudaMemcpyHostToDevice));
+
+	checkCudaErrors(cudaMalloc((void**)&_d_htIdxPool, sizeof(index_t) * _htSize));
+	checkCudaErrors(cudaMalloc((void**)&_d_htValPool, sizeof(value_t) * _htSize));
+
+	int groupID, num_blocks, num_threads, beginLoc, endLoc;
+// Kernel begin
+	// Group 0: size $(HASHTABLESIZ)
+	groupID = 0;
+	num_blocks = 100;
+	num_threads = 256;
+	beginLoc = _h_binOfs[groupID], endLoc = _h_binOfs[groupID + 1];
+	compute_sd_group <HASHTABLESIZ><<<num_blocks, num_threads >>> (
+		_d_A.csrRowPtr, _d_A.csrColIdx, _d_A.csrVal,
+		_d_B.csrRowPtr, _d_B.csrColIdx, _d_B.csrVal,
+		_d_SDRowIdx + beginLoc, endLoc - beginLoc,
+		_d_htIdxPool + beginLoc, _d_htValPool + beginLoc, 
+		_d_htOffset + beginLoc, _d_htValidLen + beginLoc);
+	// You can add other groups here
+
+// Kernel end
+	kernelBarrier();
+
+	cudaError_t cuErr = cudaGetLastError();
+	if (cuErr != cudaSuccess)
+	{
+		fprintf(stderr, "errStr = %s", cudaGetErrorString(cuErr));
+		return err = -1;
+	}
+
+	checkCudaErrors(cudaMemcpy(_h_htValidLen, _d_htValidLen, sizeof(int)*_SDRowCnt, cudaMemcpyDeviceToHost));
+
+	_SDEleTotal = 0;
+	_SDRowFailedCnt = 0;
+	for (int i = 0; i < _SDRowCnt; i++)
+	{
+		if (_h_htValidLen[i] == 0)
+		{
+			_grtRowIdx.push_back(_h_SDRowIdx[i]);
+			_SDRowFailedCnt++;
+		}
+		_SDEleTotal += _h_htValidLen[i];
+	}
+
+	return err;
+}
+
+int scsparse::computeCDGroup()
+{
+	int err = 0;
+	_CDEleTotal = 0;
+	_CDRowCnt = _grtRowIdx.size();
+	if (_CDRowCnt == 0) return err;
+	
+// Group into boxes of similar size 
+// In this version we use a simple method
 	_CDNumBlocks = 80;
 	_CDNumThreads = 32;
 	_CDBoxCnt = _CDNumBlocks * _CDNumThreads;
+	int nnzCDTotal = 0;
+	for (int i = 0; i < _CDRowCnt; i++) nnzCDTotal += _h_nnzRowCt[_grtRowIdx[i]];
 	int nnzAvg = (nnzCDTotal + _CDBoxCnt - 1) / _CDBoxCnt;
 	_h_CDRowIdxOfs = (int*)malloc((_CDBoxCnt + 1) * sizeof(int));
 	for (int i = 0, curCDLoc = 0; i < _CDBoxCnt; i++)
@@ -269,7 +393,7 @@ int scsparse::taskClassify()
 		int curBoxLoad = 0;
 		while (curCDLoc < _CDRowCnt)
 		{
-			int preAdd = _h_nnzRowCt[grtRowIdx[curCDLoc]];
+			int preAdd = _h_nnzRowCt[_grtRowIdx[curCDLoc]];
 			if (curBoxLoad + preAdd <= nnzAvg)
 			{
 				curBoxLoad += preAdd;
@@ -277,7 +401,7 @@ int scsparse::taskClassify()
 			}
 			else
 			{
-				if ((nnzAvg - curBoxLoad) > (curBoxLoad + preAdd - nnzAvg))
+				if ((nnzAvg - curBoxLoad) >(curBoxLoad + preAdd - nnzAvg))
 				{
 					curBoxLoad += preAdd;
 					curCDLoc++;
@@ -287,49 +411,25 @@ int scsparse::taskClassify()
 		}
 	}
 	_h_CDRowIdxOfs[_CDBoxCnt] = _CDRowCnt;
-	//----------------------------------------------
-
-
-	//_SDRowCnt = lesRowIdx.size();
-	//_CDRowCnt = grtRowIdx.size();
-	_h_SDRowIdx = (index_t*)malloc(sizeof(index_t)*_SDRowCnt);
-	_h_CDRowIdx = (index_t*)malloc(sizeof(index_t)*_CDRowCnt);
-	if (_SDRowCnt > 0) memcpy(_h_SDRowIdx, &lesRowIdx[0], _SDRowCnt * sizeof(index_t));
-	if (_CDRowCnt > 0) memcpy(_h_CDRowIdx, &grtRowIdx[0], _CDRowCnt * sizeof(index_t));
-
-	checkCudaErrors(cudaMalloc((void **)&_d_SDRowIdx, _SDRowCnt * sizeof(index_t)));
-	checkCudaErrors(cudaMalloc((void **)&_d_CDRowIdx, _CDRowCnt * sizeof(index_t)));
-	checkCudaErrors(cudaMalloc((void **)&_d_CDRowIdxOfs, (_CDBoxCnt+1) * sizeof(int)));
-	checkCudaErrors(cudaMemcpy(_d_SDRowIdx, _h_SDRowIdx, _SDRowCnt * sizeof(index_t), cudaMemcpyHostToDevice));
-	checkCudaErrors(cudaMemcpy(_d_CDRowIdx, _h_CDRowIdx, _CDRowCnt * sizeof(index_t), cudaMemcpyHostToDevice));
-	checkCudaErrors(cudaMemcpy(_d_CDRowIdxOfs, _h_CDRowIdxOfs, (_CDBoxCnt+1) * sizeof(index_t), cudaMemcpyHostToDevice));
-
-	return 0;
-}
-
-int scsparse::computeCDGroup()
-{
-	int err = 0;
-	if (_CDRowCnt == 0)
-	{
-		_CDEleTotal = 0;
-		return 0;
-	}
 	
-	//int *rPos = NULL;
-	//checkCudaErrors(cudaMalloc((void**)&rPos, sizeof(int)));
-	//checkCudaErrors(cudaMemset(rPos, 0, sizeof(int)));
+// -----------------------------------------------------------
+	_h_CDRowIdx = (index_t*)malloc(sizeof(index_t)*_CDRowCnt);
+	memcpy(_h_CDRowIdx, &_grtRowIdx[0], _CDRowCnt * sizeof(index_t));
+	checkCudaErrors(cudaMalloc((void **)&_d_CDRowIdx, _CDRowCnt * sizeof(index_t)));
+	checkCudaErrors(cudaMemcpy(_d_CDRowIdx, _h_CDRowIdx, _CDRowCnt * sizeof(index_t), cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMalloc((void **)&_d_CDRowIdxOfs, (_CDBoxCnt + 1) * sizeof(int)));
+	checkCudaErrors(cudaMemcpy(_d_CDRowIdxOfs, _h_CDRowIdxOfs, (_CDBoxCnt + 1) * sizeof(index_t), cudaMemcpyHostToDevice));
 
 	_h_poolOffset = (int*)malloc(sizeof(int)*_CDRowCnt);
 	_h_poolLen = (int*)malloc(sizeof(int)*_CDRowCnt);
 	checkCudaErrors(cudaMalloc((void **)&_d_poolOffset, sizeof(int)*_CDRowCnt));
 	checkCudaErrors(cudaMalloc((void**)&_d_poolLen, sizeof(int) * _CDRowCnt));
-	
+
 	int poolEndLoc = 0;
 	for (int i = 0; i < _CDRowCnt; i++)
 	{
 		_h_poolOffset[i] = poolEndLoc;
-		int absIdx = _h_CDRowIdx[i]; 
+		int absIdx = _h_CDRowIdx[i];
 		poolEndLoc += upper2bound(_h_nnzRowCt[absIdx]);
 	}
 	_poolSize = poolEndLoc;
@@ -357,7 +457,7 @@ int scsparse::computeCDGroup()
 		_d_poolIdx, _d_poolVal, _d_poolOffset, _d_poolLen);
 
 
-	checkCudaErrors(cudaMemcpy(_h_poolLen, _d_poolLen, sizeof(int) * _CDRowCnt, cudaMemcpyDeviceToHost)); 
+	checkCudaErrors(cudaMemcpy(_h_poolLen, _d_poolLen, sizeof(int) * _CDRowCnt, cudaMemcpyDeviceToHost));
 	_CDEleTotal = thrust::reduce(tIntPtr_t(_d_poolLen), tIntPtr_t(_d_poolLen) + _CDRowCnt);
 
 	cudaError_t cuErr = cudaGetLastError();
@@ -369,80 +469,35 @@ int scsparse::computeCDGroup()
 	return err;
 }
 
-int scsparse::computeSDGroup()
-{
-	int err = 0;
-	
-	_SDEleTotal = 0;
-	_h_htValidLen = (int*)malloc(sizeof(int) * _SDRowCnt);
-	_h_htOffset = (int*)malloc(sizeof(int) * _SDRowCnt);
-	checkCudaErrors(cudaMalloc((void**)&_d_htValidLen, sizeof(int) * _SDRowCnt));
-	checkCudaErrors(cudaMalloc((void**)&_d_htOffset, sizeof(int) * _SDRowCnt));
-	
-	int htEndLoc = 0;
-	for (int i = 0; i < _SDRowCnt; i++)
-	{
-		_h_htOffset[i] = htEndLoc;
-		int absIdx = _h_SDRowIdx[i];
-		htEndLoc += _h_nnzRowCt[absIdx];
-	}
-	_htSize = htEndLoc;
-	checkCudaErrors(cudaMemcpy(_d_htOffset, _h_htOffset, sizeof(int)*_SDRowCnt, cudaMemcpyHostToDevice));
-
-	checkCudaErrors(cudaMalloc((void**)&_d_htIdxPool, sizeof(index_t) * _htSize));
-	checkCudaErrors(cudaMalloc((void**)&_d_htValPool, sizeof(value_t) * _htSize));
-
-	int num_blocks = 100;
-	int num_threads = 256;
-	compute_sd_group <512><<<num_blocks, num_threads >>> (
-		_d_A.csrRowPtr, _d_A.csrColIdx, _d_A.csrVal,
-		_d_B.csrRowPtr, _d_B.csrColIdx, _d_B.csrVal,
-		_d_SDRowIdx, _SDRowCnt,
-		_d_htIdxPool, _d_htValPool, _d_htOffset, _d_htValidLen
-		);
-	kernelBarrier();
-
-	cudaError_t cuErr = cudaGetLastError();
-	if (cuErr != cudaSuccess)
-	{
-		fprintf(stderr, "errStr = %s", cudaGetErrorString(cuErr));
-		return err = -1;
-	}
-
-	checkCudaErrors(cudaMemcpy(_h_htValidLen, _d_htValidLen, sizeof(int)*_SDRowCnt, cudaMemcpyDeviceToHost));
-/*
-	for (int i = 0; i < _SDRowCnt; i++)
-	{
-	//	if(i%10==0)
-	//		printf("\b\b\b\b\b\b\b\b\b\b\b\b%d/%d", i, _SDRowCnt);
-		int offset = HASHTABLESIZ * i;
-		thrust::sort_by_key(tIntPtr_t(_d_htIdxPool) + offset, tIntPtr_t(_d_htIdxPool) + offset + HASHTABLESIZ, tDoublePtr_t(_d_htValPool) + offset);
-		_h_htValidLen[i] = HASHTABLESIZ - 
-			thrust::count(tIntPtr_t(_d_htIdxPool) + offset, tIntPtr_t(_d_htIdxPool) + offset + HASHTABLESIZ, INVALIDHASHIDX);
-		_SDEleTotal += _h_htValidLen[i];
-	}
-*/
-	_SDEleTotal = thrust::reduce(tIntPtr_t(_d_htValidLen), tIntPtr_t(_d_htValidLen) + _SDRowCnt);
-	/*
-	for (int i = 0; i < _SDRowCnt; i++)
-	{
-		int offset = HASHTABLESIZ * i;
-		_SDEleTotal += _h_htValidLen[i];
-		thrust::sort_by_key(tIntPtr_t(_d_htIdxPool) + offset, 
-			tIntPtr_t(_d_htIdxPool) + offset + _h_htValidLen[i], tDoublePtr_t(_d_htValPool) + offset);
-	}
-	*/
-
-	//int invalidCntTot = thrust::count(_d_htIdxPool, _d_htIdxPool + _SDRowCnt * HASHTABLESIZ, INVALIDHASHIDX);
-	//_SDEleTotal = _SDRowCnt * HASHTABLESIZ - invalidCntTot;
-	return err;
-}
 
 int scsparse::postProcess()
 {
 	int err = 0;
 	_h_C.nnz = _SDEleTotal + _CDEleTotal;
 	_isCached = false;
+	_h_rowAttr = (attr_t*)malloc(sizeof(attr_t) * _n);
+	_h_row2PoolIdx = (index_t*)malloc(sizeof(index_t) * _n);
+	for (int i = 0; i < _emptyRowCnt; i++)
+	{
+		int rowId = _emptyRowIdx[i];
+		_h_rowAttr[rowId] = EMPTYATTR;
+		_h_row2PoolIdx[rowId] = i;
+	}
+	for (int i = 0; i < _SDRowCnt; i++)
+	{
+		int rowId = _h_SDRowIdx[i];
+		if (_h_htValidLen[i] != 0)
+		{
+			_h_rowAttr[rowId] = SDATTR;
+			_h_row2PoolIdx[rowId] = i;
+		}
+	}
+	for (int i = 0; i < _CDRowCnt; i++)
+	{
+		int rowId = _h_CDRowIdx[i];
+		_h_rowAttr[rowId] = CDATTR;
+		_h_row2PoolIdx[rowId] = i;
+	}
 	//_h_C.csrRowPtr = (index_t*)malloc(sizeof(index_t)*(_n + 1));
 	//_h_C.csrColIdx = (index_t*)malloc(sizeof(index_t)*(_h_C.nnz));
 	//_h_C.csrVal = (value_t*)malloc(sizeof(value_t)*(_h_C.nnz));
@@ -451,6 +506,11 @@ int scsparse::postProcess()
 	
 int scsparse::getCptr(csrPtr &Cptr, bool printInfo)
 {
+	if (!_hasCalced)
+	{
+		fprintf(stderr, "[I/O Interface] Error: C has not been calculated yet.\n");
+		return -1;
+	}
 	if (!_isCached)
 	{
 		printf("[I/O Interface] No cached data found. Gathering data...");
@@ -493,13 +553,81 @@ int scsparse::getCptr(csrPtr &Cptr, bool printInfo)
 }
 
 
-
-int scsparse::freeMem() {
+int scsparse::freeMem(bool freeData, bool freeSpgemm, bool freeCache)
+{
 	int err = 0;
-	//TODO
+
+	if (_hasDataInited && freeData)
+	{
+		sdkDeleteTimer(&_spgemm_timer);
+		sdkDeleteTimer(&_stage1_timer);
+		sdkDeleteTimer(&_stage1_1_timer);
+		sdkDeleteTimer(&_stage1_2_timer);
+		sdkDeleteTimer(&_stage2_timer);
+		sdkDeleteTimer(&_stage2_1_timer);
+		sdkDeleteTimer(&_stage3_timer);
+		sdkDeleteTimer(&_stage3_1_timer);
+		sdkDeleteTimer(&_stage3_2_timer);
+		sdkDeleteTimer(&_stage4_timer);
+		sdkDeleteTimer(&_stage4_1_timer);
+
+		checkCudaErrors(cudaFree(_d_A.csrRowPtr));
+		checkCudaErrors(cudaFree(_d_A.csrColIdx));
+		checkCudaErrors(cudaFree(_d_A.csrVal));
+
+		checkCudaErrors(cudaFree(_d_B.csrRowPtr));
+		checkCudaErrors(cudaFree(_d_B.csrColIdx));
+		checkCudaErrors(cudaFree(_d_B.csrVal));
+		_hasDataInited = false;
+	}
+	if (_hasCalced && freeSpgemm)
+	{
+		checkCudaErrors(cudaFree(_d_nnzRowCt));
+		checkCudaErrors(cudaFree(_d_eigenRow));
+		free(_h_nnzRowCt);
+		free(_h_eigenRow);
+
+		_emptyRowIdx.clear();
+		_lesRowIdx.clear();
+		_grtRowIdx.clear();
+
+		free(_h_SDRowIdx);
+		checkCudaErrors(cudaFree(_d_SDRowIdx));
+		free(_h_binOfs);
+		free(_h_htValidLen);
+		free(_h_htOffset);
+		checkCudaErrors(cudaFree(_d_htValidLen));
+		checkCudaErrors(cudaFree(_d_htOffset));
+		checkCudaErrors(cudaFree(_d_htIdxPool));
+		checkCudaErrors(cudaFree(_d_htValPool));
+
+
+		free(_h_CDRowIdxOfs);
+		free(_h_CDRowIdx);
+		checkCudaErrors(cudaFree(_d_CDRowIdxOfs));
+		checkCudaErrors(cudaFree(_d_CDRowIdx));
+		free(_h_poolOffset);
+		free(_h_poolLen);
+		checkCudaErrors(cudaFree(_d_poolOffset));
+		checkCudaErrors(cudaFree(_d_poolLen));
+		checkCudaErrors(cudaFree(_d_poolIdx));
+		checkCudaErrors(cudaFree(_d_poolVal));
+
+		free(_h_rowAttr);
+		free(_h_row2PoolIdx);
+		_hasCalced = false;
+	}
+	if (_isCached && freeCache)
+	{
+		free(_h_C.csrRowPtr);
+		free(_h_C.csrColIdx);
+		free(_h_C.csrVal);
+	}
+
 	return err;
 }
 
-scsparse::~scsparse() {
+scsparse::~scsparse() 
+{
 	freeMem();
 }

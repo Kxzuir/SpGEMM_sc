@@ -266,8 +266,6 @@ compute_cd_group_merge(index_t *d_csrRowPtrA, index_t *d_csrColIdxA, value_t *d_
 }
 
 
-
-
 __device__  int
 sd_hashtable_insert(
 	index_t *hashIdx, value_t *hashVal, int htSize,
@@ -330,13 +328,23 @@ compute_sd_group(
 				index_t loc = d_csrColIdxB[k];
 				value_t u = d_csrValB[k];
 				int err = sd_hashtable_insert(hashIdx, hashVal, htAllocSize, loc, u*v);
-				//Todo: Full hash table
-				//if (err == SD_HT_INS_ERR_HTFULL)
+				// Full hash table
+				if (err == SD_HT_INS_ERR_HTFULL)
+				{
+					hashIdx[0] = -1;
+					break;
+				}
 			}
 		}
 		__syncthreads();
-		//Getvalid len
-		//Todo : optimize speed
+		// Check status
+		if (hashIdx[0] == -1)
+		{
+			d_htLen[curSDItemId] = 0;
+			continue;
+		}
+		// Get valid len
+		// Todo : optimize speed
 		if (thread_id == 0)
 		{
 			int wPos = 0;

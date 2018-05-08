@@ -20,9 +20,11 @@ public:
 	int initDevice(int deviceId = 0, bool printInfo = true);
 	int initData(int n, int m, int p, csrPtr Aptr, csrPtr Bptr, 
 		bool printInfo = true);
+	int warmup(int times = 3);
 	int spgemm();
 	int getCptr(csrPtr &Cptr, bool printInfo = true);
-	int freeMem();
+	int freeMem(bool freeData = true, bool freeSpgemm = true, 
+		bool freeCache = true);
 	~scsparse();
 private:
 	bool _hasPFInited, _hasDataInited, _hasCalced;
@@ -43,23 +45,31 @@ private:
 
 	int *_d_nnzRowCt, *_h_nnzRowCt;
 	double *_d_eigenRow, *_h_eigenRow;
-	int compute_nnzRowCt_eigenRow();
+	int compute_nnzRowCt_eigenRow(bool isWarmup = false);
 
 	int _nnzCt;
 	double _alpha;
 	int computeAlpha();
 
-	int _SDRowCnt, _CDRowCnt, _CDBoxCnt;
-	index_t *_h_CDRowIdx, *_h_SDRowIdx;
-	index_t *_d_CDRowIdx, *_d_SDRowIdx;
-	int *_h_CDRowIdxOfs, *_d_CDRowIdxOfs;
-	index_t *_h_rowAttr;
-	index_t *_h_row2PoolIdx;
-	int _CDNumBlocks, _CDNumThreads;
-	
+	int _SDRowCnt, _SDRowFailedCnt, _CDRowCnt, _CDBoxCnt;
+	int _emptyRowCnt;
+	std::vector<index_t> _grtRowIdx, _lesRowIdx, _emptyRowIdx;
 	int taskClassify();
 
-
+	index_t *_h_SDRowIdx, *_d_SDRowIdx;
+	index_t *_h_SDRowNNZ, *_d_SDRowNNZ;
+	int _binNum, *_h_binOfs;
+	index_t *_d_htIdxPool;
+	value_t *_d_htValPool;
+	int *_h_htOffset, *_d_htOffset;
+	int *_h_htValidLen, *_d_htValidLen;
+	int _htSize;
+	int _SDEleTotal;
+	int computeSDGroup();
+	
+	int *_h_CDRowIdxOfs, *_d_CDRowIdxOfs;
+	index_t *_h_CDRowIdx, *_d_CDRowIdx;
+	int _CDNumBlocks, _CDNumThreads;
 	int *_h_poolLen, *_d_poolLen;	//real len
 	index_t *_d_poolIdx;
 	value_t *_d_poolVal;
@@ -67,17 +77,14 @@ private:
 	int _poolSize;
 	int _CDEleTotal;
 	int computeCDGroup();
+	
+	index_t *_h_rowAttr;
+	index_t *_h_row2PoolIdx;
+	int postProcess();
 
-	index_t * _d_htIdxPool;
-	value_t * _d_htValPool;
-	int *_h_htOffset, *_d_htOffset;
-	int * _h_htValidLen, *_d_htValidLen;
-	int _htSize;
-	int _SDEleTotal;
-	int computeSDGroup();
 	
 	bool _isCached;
-	int postProcess();
+	
 };
 
 #endif
