@@ -50,7 +50,7 @@ public:
 
 #define APP_NAME "SpGEMM_SC"
 #define MAJOR_VERSION 2
-#define MINOR_VERSION 6
+#define MINOR_VERSION 7
 #define CPRT_YEAR 2018
 #define AUTHOR "BUPT GPU Architecture Study Group"
 #define CODER "Kxzuir"
@@ -99,5 +99,6 @@ Add warmup function
 Code struct reconstruct
 
 v2.7
+Add support for 32-bit floating-point computation
 Bugfix
 */

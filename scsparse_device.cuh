@@ -41,9 +41,9 @@ void swap(int &a, int &b)
 }
 
 __device__
-void swap(double &a, double &b)
+void swap(value_t &a, value_t &b)
 {
-	double t = a;
+	value_t t = a;
 	a = b;
 	b = t;
 }

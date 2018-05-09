@@ -50,7 +50,7 @@ int GeMMChecker::checkCSR(CSRHost A, CSRHost B, csrPtr Cptr, bool printInfo)
 }
 
 template<class I, class T>
-static void GeMMChecker::csr_sort_indices(const I n_row, const I Ap[], I Aj[], T Ax[])
+void GeMMChecker::csr_sort_indices(const I n_row, const I Ap[], I Aj[], T Ax[])
 {
 	std::vector< std::pair<I, T> > temp;
 
