@@ -268,7 +268,7 @@ int scsparse::computeAlpha()
 	_alpha = (double)_h_A.nnz / _nnzCt;
 	//_alpha *= 10;
 	//_alpha = 1e100;
-	_alpha = -1;
+	//_alpha = -1;
 	return 0;
 }
 
@@ -283,6 +283,7 @@ int scsparse::taskClassify()
 	_emptyRowCnt = _emptyRowIdx.size();
 	_SDRowCnt = _lesRowIdx.size();
 	_CDRowCnt = _grtRowIdx.size();
+	_SDRowFailedCnt = 0;
 	return 0;
 }
 
@@ -291,7 +292,6 @@ int scsparse::computeSDGroup()
 {
 	int err = 0;
 	_SDEleTotal = 0;
-	_SDRowFailedCnt = 0;
 	if (_SDRowCnt == 0) return err;
 	_h_SDRowIdx = (index_t*)malloc(sizeof(index_t)*_SDRowCnt);
 	//_h_SDRowNNZ = (index_t*)malloc(sizeof(index_t)*_SDRowCnt);
