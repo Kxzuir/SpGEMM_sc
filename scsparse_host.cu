@@ -268,6 +268,7 @@ int scsparse::computeAlpha()
 	_alpha = (double)_h_A.nnz / _nnzCt;
 	//_alpha *= 10;
 	//_alpha = 1e100;
+	_alpha = -1;
 	return 0;
 }
 
@@ -290,6 +291,7 @@ int scsparse::computeSDGroup()
 {
 	int err = 0;
 	_SDEleTotal = 0;
+	_SDRowFailedCnt = 0;
 	if (_SDRowCnt == 0) return err;
 	_h_SDRowIdx = (index_t*)malloc(sizeof(index_t)*_SDRowCnt);
 	//_h_SDRowNNZ = (index_t*)malloc(sizeof(index_t)*_SDRowCnt);
@@ -401,7 +403,8 @@ int scsparse::computeCDGroup()
 			}
 			else
 			{
-				if ((nnzAvg - curBoxLoad) >(curBoxLoad + preAdd - nnzAvg))
+				if ((_CDRowCnt - curCDLoc) == (_CDBoxCnt - i) ||
+					(nnzAvg - curBoxLoad) >(curBoxLoad + preAdd - nnzAvg))
 				{
 					curBoxLoad += preAdd;
 					curCDLoc++;
@@ -591,27 +594,32 @@ int scsparse::freeMem(bool freeData, bool freeSpgemm, bool freeCache)
 		_lesRowIdx.clear();
 		_grtRowIdx.clear();
 
-		free(_h_SDRowIdx);
-		checkCudaErrors(cudaFree(_d_SDRowIdx));
-		free(_h_binOfs);
-		free(_h_htValidLen);
-		free(_h_htOffset);
-		checkCudaErrors(cudaFree(_d_htValidLen));
-		checkCudaErrors(cudaFree(_d_htOffset));
-		checkCudaErrors(cudaFree(_d_htIdxPool));
-		checkCudaErrors(cudaFree(_d_htValPool));
+		if (_SDRowCnt != 0)
+		{
+			free(_h_SDRowIdx);
+			checkCudaErrors(cudaFree(_d_SDRowIdx));
+			free(_h_binOfs);
+			free(_h_htValidLen);
+			free(_h_htOffset);
+			checkCudaErrors(cudaFree(_d_htValidLen));
+			checkCudaErrors(cudaFree(_d_htOffset));
+			checkCudaErrors(cudaFree(_d_htIdxPool));
+			checkCudaErrors(cudaFree(_d_htValPool));
+		}
 
-
-		free(_h_CDRowIdxOfs);
-		free(_h_CDRowIdx);
-		checkCudaErrors(cudaFree(_d_CDRowIdxOfs));
-		checkCudaErrors(cudaFree(_d_CDRowIdx));
-		free(_h_poolOffset);
-		free(_h_poolLen);
-		checkCudaErrors(cudaFree(_d_poolOffset));
-		checkCudaErrors(cudaFree(_d_poolLen));
-		checkCudaErrors(cudaFree(_d_poolIdx));
-		checkCudaErrors(cudaFree(_d_poolVal));
+		if (_CDRowCnt != 0)
+		{
+			free(_h_CDRowIdxOfs);
+			free(_h_CDRowIdx);
+			checkCudaErrors(cudaFree(_d_CDRowIdxOfs));
+			checkCudaErrors(cudaFree(_d_CDRowIdx));
+			free(_h_poolOffset);
+			free(_h_poolLen);
+			checkCudaErrors(cudaFree(_d_poolOffset));
+			checkCudaErrors(cudaFree(_d_poolLen));
+			checkCudaErrors(cudaFree(_d_poolIdx));
+			checkCudaErrors(cudaFree(_d_poolVal));
+		}
 
 		free(_h_rowAttr);
 		free(_h_row2PoolIdx);

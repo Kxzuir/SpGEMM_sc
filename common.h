@@ -97,4 +97,7 @@ Add falldown mechanism for SDGroup rows (fall into CDGroup)
 Add memory management
 Add warmup function
 Code struct reconstruct
+
+v2.7
+Bugfix
 */

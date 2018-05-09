@@ -175,6 +175,13 @@ bitonicSort_by_key_block(int CDRowCnt,
 			hashIdx = keyBuf;
 			hashVal = valBuf;
 		}
+		else
+		{
+			for (int i = validLen + thread_id; i < len; i += num_threads)
+			{
+				key[i] = INT_MAX;
+			}
+		}
 		__syncthreads();
 		int num_iter = len / num_threads;
 		if (num_iter == 0) num_iter = 1;
@@ -305,6 +312,8 @@ compute_sd_group(
 	int num_blocks = gridDim.x;
 	int num_threads = blockDim.x;
 	int thread_id = threadIdx.x;
+	__shared__ index_t hashIdx[htAllocSize];
+	__shared__ value_t hashVal[htAllocSize];
 	for (int curSDItemId = blockIdx.x; curSDItemId < SDRowCnt; curSDItemId += num_blocks)
 	{
 		int curRowIdx = d_SDRowIdx[curSDItemId];
@@ -313,8 +322,6 @@ compute_sd_group(
 		value_t *curRowValPtr = d_csrValA + d_csrRowPtrA[curRowIdx];
 		index_t idxUpBound = INVALIDHASHIDX;
 		value_t valInit = 0;
-		__shared__ index_t hashIdx[htAllocSize];
-		__shared__ value_t hashVal[htAllocSize];
 		for (int i = thread_id; i < htAllocSize; i += num_threads) hashIdx[i] = idxUpBound;
 		for (int i = thread_id; i < htAllocSize; i += num_threads) hashVal[i] = valInit;
 		__syncthreads();
@@ -340,7 +347,8 @@ compute_sd_group(
 		// Check status
 		if (hashIdx[0] == -1)
 		{
-			d_htLen[curSDItemId] = 0;
+			if (thread_id == 0) d_htLen[curSDItemId] = 0;
+			__syncthreads();
 			continue;
 		}
 		// Get valid len

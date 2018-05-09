@@ -13,7 +13,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{8D2267B9-6B4F-40A9-B837-486DECA2B106}</ProjectGuid>
     <RootNamespace>SpGEMM_sc</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(SolutionDir)\Microsoft.VCToolsVersion.14.11.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -101,34 +101,23 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <CudaCompile Include="main.cpp" />
-    <CudaCompile Include="GeMMChecker.cu" />
+    <CudaCompile Include="gemm_checker.cu" />
     <CudaCompile Include="scsparse_host.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h" />
-    <ClInclude Include="GeMMChecker.h" />
+    <ClInclude Include="gemm_checker.h" />
     <ClInclude Include="scsparse_device.cuh" />
     <ClInclude Include="scsparse_host.h" />
     <ClInclude Include="utility.h" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="small.mtx">
-      <FileType>Document</FileType>
-    </Text>
-    <Text Include="test.mtx">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-      </ExcludedFromBuild>
+    <Text Include="sample.mtx">
       <FileType>Document</FileType>
     </Text>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="utility.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="cant.mtx" />
-    <None Include="filter3D.mtx" />
-    <None Include="pwtk.mtx" />
-    <None Include="QCD.mtx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
