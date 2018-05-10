@@ -26,6 +26,12 @@ typedef int attr_t;
 typedef cusp::csr_matrix<index_t, value_t, cusp::host_memory> CSRHost;
 
 
+struct Arg_t
+{
+	double alpha_coe;
+};
+
+
 struct csrPtr
 {
 public:
@@ -40,6 +46,7 @@ public:
 
 
 #define HASHTABLESIZ 512
+#define ALPHA_COEFFICIENT 1
 
 #define INVALIDHASHIDX INT_MAX
 #define SD_HT_INS_ERR_HTFULL (-1)
@@ -51,6 +58,7 @@ public:
 #define APP_NAME "SpGEMM_SC"
 #define MAJOR_VERSION 2
 #define MINOR_VERSION 7
+#define REVISION 1
 #define CPRT_YEAR 2018
 #define AUTHOR "BUPT GPU Architecture Study Group"
 #define CODER "Kxzuir"
@@ -101,4 +109,7 @@ Code struct reconstruct
 v2.7
 Add support for 32-bit floating-point computation
 Bugfix
+
+v2.7.1
+Support alpha coefficient adjustment
 */

@@ -16,9 +16,9 @@ unsigned int upper2bound(unsigned int v)
 	return v;
 }
 
-void printHeader(const char *appName, int majorVer, int minorVer, int year, const char *corpName)
+void printHeader(const char *appName, int majorVer, int minorVer, int revision, int year, const char *corpName)
 {
-	printf("%s [Version %d.%d]\n", appName, majorVer, minorVer);
+	printf("%s [Version %d.%d.%d]\n", appName, majorVer, minorVer, revision);
 	printf("(c) %d %s. All rights reserved.\n", year, corpName);
 	printf("\n");
 }

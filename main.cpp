@@ -3,7 +3,7 @@
 #include "gemm_checker.h"
 #include <cusp/io/matrix_market.h>
 
-int benchmark_spgemm(const char *datasetA, const char *datasetB) 
+int benchmark_spgemm(const char *datasetA, const char *datasetB, const Arg_t args) 
 {
 	int err = 0;
 	CSRHost A, B;
@@ -22,6 +22,7 @@ int benchmark_spgemm(const char *datasetA, const char *datasetB)
 	sc_sparse->initData(n, m, p,
 		csrPtr(A.num_entries, &A.row_offsets[0], &A.column_indices[0], &A.values[0]),
 		csrPtr(B.num_entries, &B.row_offsets[0], &B.column_indices[0], &B.values[0]));
+	sc_sparse->initConfig(args);
 	sc_sparse->warmup();
 	sc_sparse->spgemm();
 
@@ -39,16 +40,16 @@ int benchmark_spgemm(const char *datasetA, const char *datasetB)
 int main(int argc, char *argv[])
 {
 	int err = 0;
-	if (argc != 2)
+	if (argc != 3)
 	{
-		printHelp(argv[0], "file", "Perform SpGeMM benchmark on matrix market file");
+		printHelp(argv[0], "file alpha_coefficient", "Perform SpGeMM benchmark on matrix market file");
 		return 255;
 	}
-	printHeader(APP_NAME, MAJOR_VERSION, MINOR_VERSION, CPRT_YEAR, AUTHOR);
-	printf("[AppFramework] Using arg = \"%s\"\n", argv[1]);
+	printHeader(APP_NAME, MAJOR_VERSION, MINOR_VERSION, REVISION, CPRT_YEAR, AUTHOR);
+	printf("[AppFramework] Using arg = \"%s %s\"\n", argv[1], argv[2]);
 	char *fileName = argv[1];
-	err = benchmark_spgemm(fileName, "");
-	
+	Arg_t args = { atof(argv[2]) };
+	err = benchmark_spgemm(fileName, "", args);
 	if (err) fprintf(stderr, "[AppFramework] App exited with code %d\n", err);
 	else printf("[AppFramework] App exited normally.\n");
 	return err;

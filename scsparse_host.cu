@@ -92,6 +92,13 @@ int scsparse::initData(int n, int m, int p, csrPtr Aptr, csrPtr Bptr, bool print
 	return err;
 }
 
+int scsparse::initConfig(Arg_t args)
+{
+	int err = 0;
+	_alpha_coefficient = args.alpha_coe;
+	return err;
+}
+
 int scsparse::warmup(int times)
 {
 	int err = 0;
@@ -145,7 +152,7 @@ int scsparse::spgemm()
 	else printf("done, in %.2f ms\n", sdkGetTimerValue(&_stage1_2_timer));
 
 	sdkStopTimer(&_stage1_timer);
-	printf("[SpGeMM] Alpha = %.2f\n", _alpha);
+	printf("[SpGeMM] Alpha = %.2f (%.2fx)\n", _alpha, _alpha_coefficient);
 	printf("[SpGeMM] Stage 1/4 finished in %.2f ms.\n", sdkGetTimerValue(&_stage1_timer));
 	printLine();
 
@@ -266,7 +273,7 @@ int scsparse::computeAlpha()
 	//_nnzCt = std::accumulate(_h_nnzRowCt, _h_nnzRowCt + _n, 0);
 	_nnzCt = thrust::reduce(tIntPtr_t(_d_nnzRowCt), tIntPtr_t(_d_nnzRowCt) + _n);
 	_alpha = (double)_h_A.nnz / _nnzCt;
-	//_alpha *= 10;
+	_alpha *= _alpha_coefficient;
 	//_alpha = 1e100;
 	//_alpha = -1;
 	return 0;

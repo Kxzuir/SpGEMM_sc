@@ -53,22 +53,20 @@ template<class I, class T>
 void GeMMChecker::csr_sort_indices(const I n_row, const I Ap[], I Aj[], T Ax[])
 {
 	std::vector< std::pair<I, T> > temp;
-
-	for (I i = 0; i < n_row; i++) {
+	for (I i = 0; i < n_row; i++)
+	{
 		I row_start = Ap[i];
 		I row_end = Ap[i + 1];
-
 		temp.clear();
-
-		for (I jj = row_start; jj < row_end; jj++) {
-			temp.push_back(std::make_pair(Aj[jj], Ax[jj]));
-		}
+		for (I j = row_start; j < row_end; j++)
+			temp.push_back(std::make_pair(Aj[j], Ax[j]));
 
 		std::sort(temp.begin(), temp.end(), kv_pair_less<I, T>);
 
-		for (I jj = row_start, n = 0; jj < row_end; jj++, n++) {
-			Aj[jj] = temp[n].first;
-			Ax[jj] = temp[n].second;
+		for (I j = row_start, n = 0; j < row_end; j++, n++)
+		{
+			Aj[j] = temp[n].first;
+			Ax[j] = temp[n].second;
 		}
 	}
 }

@@ -20,6 +20,7 @@ public:
 	int initDevice(int deviceId = 0, bool printInfo = true);
 	int initData(int n, int m, int p, csrPtr Aptr, csrPtr Bptr, 
 		bool printInfo = true);
+	int initConfig(Arg_t args);
 	int warmup(int times = 3);
 	int spgemm();
 	int getCptr(csrPtr &Cptr, bool printInfo = true);
@@ -49,6 +50,7 @@ private:
 
 	int _nnzCt;
 	double _alpha;
+	double _alpha_coefficient;
 	int computeAlpha();
 
 	int _SDRowCnt, _SDRowFailedCnt, _CDRowCnt, _CDBoxCnt;
