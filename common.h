@@ -58,7 +58,7 @@ public:
 #define APP_NAME "SpGEMM_SC"
 #define MAJOR_VERSION 2
 #define MINOR_VERSION 7
-#define REVISION 1
+#define REVISION 2
 #define CPRT_YEAR 2018
 #define AUTHOR "BUPT GPU Architecture Study Group"
 #define CODER "Kxzuir"
@@ -112,4 +112,7 @@ Bugfix
 
 v2.7.1
 Support alpha coefficient adjustment
+
+v2.7.2
+Add struct code for analysis
 */

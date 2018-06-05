@@ -23,14 +23,6 @@ void printHeader(const char *appName, int majorVer, int minorVer, int revision, 
 	printf("\n");
 }
 
-/*
-Usage:
-mkfs [options] [-t <type>] [fs-options] <device> [<size>]
-
-Make a Linux filesystem.
-
-*/
-
 void printHelp(char *appName, char *opts, char *info)
 {
 	printf("Usage:\n");

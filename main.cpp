@@ -32,6 +32,7 @@ int benchmark_spgemm(const char *datasetA, const char *datasetB, const Arg_t arg
 	int checkRes = GeMMChecker::checkCSR(A, B, Cptr, true);
 	if (checkRes != 0) fprintf(stderr, "Result mismatch!\n");
 	
+	sc_sparse->analyse();
 	sc_sparse->freeMem();
 	return err;
 }

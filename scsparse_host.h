@@ -26,6 +26,7 @@ public:
 	int getCptr(csrPtr &Cptr, bool printInfo = true);
 	int freeMem(bool freeData = true, bool freeSpgemm = true, 
 		bool freeCache = true);
+	int analyse();
 	~scsparse();
 private:
 	bool _hasPFInited, _hasDataInited, _hasCalced;

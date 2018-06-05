@@ -562,6 +562,34 @@ int scsparse::getCptr(csrPtr &Cptr, bool printInfo)
 	return 0;
 }
 
+int scsparse::analyse()
+{
+	int *a_nnzRowA = (int*)malloc(_n* sizeof(int));
+	for (int i = 0; i < _n; i++)
+		a_nnzRowA[i] = _h_A.csrRowPtr[i + 1] - _h_A.csrRowPtr[i];
+	double a_avgRowNnzA = _h_A.nnz * 1.0 / _n;
+
+	int *a_nnzRowCt = _h_nnzRowCt;
+	double a_avgRowNnzCt = _nnzCt * 1.0 / _n;
+	int a_nnzCt = _nnzCt;
+
+	int *a_nnzRowC = (int*)malloc(_n * sizeof(int));
+	for (int i = 0; i < _n; i++)
+		a_nnzRowC[i] = _h_C.csrRowPtr[i + 1] - _h_A.csrRowPtr[i];
+	double a_avgRowNnzC = _h_C.nnz * 1.0 / _n;
+	int a_nnzC = _h_C.nnz;
+
+	//------------ANA_BEGIN-------------------
+
+
+
+	//-------------ANA_END--------------------
+	
+
+	free(a_nnzRowA);
+	free(a_nnzRowC);
+	return 0;
+}
 
 int scsparse::freeMem(bool freeData, bool freeSpgemm, bool freeCache)
 {
