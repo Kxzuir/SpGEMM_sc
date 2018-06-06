@@ -41,6 +41,9 @@ int benchmark_spgemm(const char *datasetA, const char *datasetB, const Arg_t arg
 int main(int argc, char *argv[])
 {
 	int err = 0;
+#ifdef NO_OUTPUT
+	freopen("NUL", "w", stdout);
+#endif
 	if (argc != 3)
 	{
 		printHelp(argv[0], "file alpha_coefficient", "Perform SpGeMM benchmark on matrix market file");

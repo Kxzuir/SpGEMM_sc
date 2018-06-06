@@ -63,6 +63,10 @@ public:
 #define AUTHOR "BUPT GPU Architecture Study Group"
 #define CODER "Kxzuir"
 
+// Uncomment this to disable stdout
+#define NO_OUTPUT
+
+
 
 #endif
 
