@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 {
 	int err = 0;
 #ifdef NO_OUTPUT
-	freopen("NUL", "w", stdout);
+	freopen(NULL_DEV_PATH, "w", stdout);
 #endif
 	if (argc != 3)
 	{

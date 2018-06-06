@@ -17,6 +17,7 @@
 
 #include <cusp/csr_matrix.h>
 
+#include "platform.h"
 #include "utility.h"
 
 
@@ -119,4 +120,5 @@ Support alpha coefficient adjustment
 
 v2.7.2
 Add struct code for analysis
+Cross-platform work
 */
