@@ -96,6 +96,7 @@ int scsparse::initConfig(Arg_t args)
 {
 	int err = 0;
 	_alpha_coefficient = args.alpha_coe;
+	_matName = args.matName;
 	return err;
 }
 

@@ -30,6 +30,7 @@ typedef cusp::csr_matrix<index_t, value_t, cusp::host_memory> CSRHost;
 struct Arg_t
 {
 	double alpha_coe;
+	std::string matName;
 };
 
 

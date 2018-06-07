@@ -36,6 +36,7 @@ private:
 	int _n, _m, _p;
 	csrPtr _h_A, _h_B, _h_C;
 	csrPtr _d_A, _d_B, _d_C;
+	std::string _matName;
 
 	StopWatchInterface *_spgemm_timer;
 	StopWatchInterface *_stage1_timer, *_stage1_1_timer, *_stage1_2_timer;

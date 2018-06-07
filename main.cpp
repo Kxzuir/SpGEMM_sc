@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
 	printHeader(APP_NAME, MAJOR_VERSION, MINOR_VERSION, REVISION, CPRT_YEAR, AUTHOR);
 	printf("[AppFramework] Using arg = \"%s %s\"\n", argv[1], argv[2]);
 	char *fileName = argv[1];
-	Arg_t args = { atof(argv[2]) };
+	Arg_t args = { atof(argv[2]), argv[1]};
 	err = benchmark_spgemm(fileName, "", args);
 	if (err) fprintf(stderr, "[AppFramework] App exited with code %d\n", err);
 	else printf("[AppFramework] App exited normally.\n");
