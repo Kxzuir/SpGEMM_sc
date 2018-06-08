@@ -576,7 +576,7 @@ int scsparse::analyse()
 
 	int *a_nnzRowC = (int*)malloc(_n * sizeof(int));
 	for (int i = 0; i < _n; i++)
-		a_nnzRowC[i] = _h_C.csrRowPtr[i + 1] - _h_A.csrRowPtr[i];
+		a_nnzRowC[i] = _h_C.csrRowPtr[i + 1] - _h_C.csrRowPtr[i];
 	double a_avgRowNnzC = _h_C.nnz * 1.0 / _n;
 	int a_nnzC = _h_C.nnz;
 
