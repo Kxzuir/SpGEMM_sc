@@ -60,13 +60,13 @@ public:
 #define APP_NAME "SpGEMM_SC"
 #define MAJOR_VERSION 2
 #define MINOR_VERSION 7
-#define REVISION 2
+#define REVISION 3
 #define CPRT_YEAR 2018
 #define AUTHOR "BUPT GPU Architecture Study Group"
 #define CODER "Kxzuir"
 
 // Uncomment this to disable stdout
-#define NO_OUTPUT
+//#define NO_OUTPUT
 
 
 
@@ -122,4 +122,7 @@ Support alpha coefficient adjustment
 v2.7.2
 Add struct code for analysis
 Cross-platform work
+
+v2.7.3
+Upgraded to CUDA 9.2
 */
