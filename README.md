@@ -6,7 +6,7 @@ You can either use Visual Studio 2017 under Windows, or use Makefile under Linux
 
 Before building, you need to put [cusplibrary](https://github.com/cusplibrary/cusplibrary) into folder `/cusp `. For Linux users, change `CUDA_INSTALL_PATH ` in `Makefile` is also required.
 
-The program has been tested on nVIDIA GeForce GTX 1060 6G with CUDA SDK v9.1, CUSP v5.1 and major operating systems (Ubuntu 16.04.3 and Windows 10 Pro, 1803).
+The program has been tested on NVIDIA GeForce GTX 1060 6G with CUDA SDK v9.2, CUSP v5.1 and major operating systems (Ubuntu 16.04.3 and Windows 10 Pro, 1803).
 
 Usage example: `./spgemm_sc cant.max 1.0 ` 
 
