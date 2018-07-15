@@ -178,7 +178,7 @@ int scsparse::spgemm()
 	sdkStartTimer(&_stage3_timer);
 
 	// STAGE 3 - STEP 1 : compute SD group
-	printf("computeSDGroup() [hash_table_size = %d]...", HASHTABLESIZ);
+	printf("computeSDGroup() [hash_table_bin_cnt = %d]...", HASHBINNUM);
 	sdkStartTimer(&_stage3_2_timer);
 	err = computeSDGroup();	// func
 	err |= kernelBarrier();
@@ -302,23 +302,36 @@ int scsparse::computeSDGroup()
 	_SDEleTotal = 0;
 	if (_SDRowCnt == 0) return err;
 	_h_SDRowIdx = (index_t*)malloc(sizeof(index_t)*_SDRowCnt);
-	//_h_SDRowNNZ = (index_t*)malloc(sizeof(index_t)*_SDRowCnt);
-	memcpy(_h_SDRowIdx, &_lesRowIdx[0], _SDRowCnt * sizeof(index_t));
-	//for (int i = 0; i < _SDRowCnt; i++) _h_SDRowNNZ[i] = _h_nnzRowCt[_h_SDRowIdx[i]];
-	checkCudaErrors(cudaMalloc((void **)&_d_SDRowIdx, _SDRowCnt * sizeof(index_t)));
-	//checkCudaErrors(cudaMalloc((void **)&_d_SDRowNNZ, _SDRowCnt * sizeof(int)));
-	checkCudaErrors(cudaMemcpy(_d_SDRowIdx, _h_SDRowIdx, _SDRowCnt * sizeof(index_t), cudaMemcpyHostToDevice));
-	//checkCudaErrors(cudaMemcpy(_d_SDRowNNZ, _h_SDRowNNZ, _SDRowCnt * sizeof(int), cudaMemcpyHostToDevice));
-	//thrust::sort_by_key(tIntPtr_t(_d_SDRowNNZ), tIntPtr_t(_d_SDRowNNZ)+_SDRowCnt, tIntPtr_t(_d_SDRowIdx));
-	//checkCudaErrors(cudaMemcpy(_h_SDRowIdx, _d_SDRowIdx, _SDRowCnt * sizeof(index_t), cudaMemcpyDeviceToHost));
-	//checkCudaErrors(cudaMemcpy(_h_SDRowNNZ, _d_SDRowNNZ, _SDRowCnt * sizeof(int), cudaMemcpyDeviceToHost));
 
-// Group into different bins
-// In this version we simply alloc one pool of pre-defined size
-	_binNum = 1;
+
+// Group into different bins, using data in _lesRowIdx
+	_binNum = HASHBINNUM;
 	_h_binOfs = (int*)malloc(sizeof(int)*(_binNum + 1));
-	_h_binOfs[0] = 0, _h_binOfs[_binNum] = _SDRowCnt;
-// -----------------------------------------------------------
+	_h_binOfs[0] = 0;
+	std::vector<std::vector<int> > _SD_bin(_binNum, std::vector<int>());
+
+	for (int i = 0; i < _SDRowCnt; i++)
+	{
+		int absIdx = _lesRowIdx[i];
+		int tag = (int)((log(_h_nnzRowCt[absIdx]) / log(2)) - 4);
+		if (tag < 0) tag = 0;
+		if (tag >= _binNum) tag = _binNum - 1;
+		_SD_bin[tag].push_back(absIdx);
+	}
+	for (int i = 0; i < _binNum; i++)
+	{
+		int curBinLen = _SD_bin[i].size();
+		_h_binOfs[i + 1] = _h_binOfs[i] + curBinLen;
+		for (int j = 0; j < curBinLen; j++)
+			_h_SDRowIdx[_h_binOfs[i] + j] = _SD_bin[i][j];
+	}
+
+// -------------------------------------------------------
+
+	//memcpy(_h_SDRowIdx, &_lesRowIdx[0], _SDRowCnt * sizeof(index_t));
+	checkCudaErrors(cudaMalloc((void **)&_d_SDRowIdx, _SDRowCnt * sizeof(index_t)));
+	checkCudaErrors(cudaMemcpy(_d_SDRowIdx, _h_SDRowIdx, _SDRowCnt * sizeof(index_t), cudaMemcpyHostToDevice));
+
 
 	_h_htValidLen = (int*)malloc(sizeof(int) * _SDRowCnt);
 	_h_htOffset = (int*)malloc(sizeof(int) * _SDRowCnt);
@@ -340,21 +353,79 @@ int scsparse::computeSDGroup()
 	checkCudaErrors(cudaMalloc((void**)&_d_htValPool, sizeof(value_t) * _htSize));
 
 	int groupID, num_blocks, num_threads, beginLoc, endLoc;
+
 // Kernel begin
-	// Group 0: size $(HASHTABLESIZ)
+	// Group 0: size HASHTABLESIZ_32
 	groupID = 0;
 	num_blocks = 100;
 	num_threads = 256;
 	beginLoc = _h_binOfs[groupID], endLoc = _h_binOfs[groupID + 1];
-	compute_sd_group <HASHTABLESIZ><<<num_blocks, num_threads >>> (
+	compute_sd_group <HASHTABLESIZ_32><<<num_blocks, num_threads >>> (
 		_d_A.csrRowPtr, _d_A.csrColIdx, _d_A.csrVal,
 		_d_B.csrRowPtr, _d_B.csrColIdx, _d_B.csrVal,
 		_d_SDRowIdx + beginLoc, endLoc - beginLoc,
 		_d_htIdxPool + beginLoc, _d_htValPool + beginLoc, 
 		_d_htOffset + beginLoc, _d_htValidLen + beginLoc);
+	
+	// Group 1: size HASHTABLESIZ_64
+	groupID = 1;
+	num_blocks = 100;
+	num_threads = 256;
+	beginLoc = _h_binOfs[groupID], endLoc = _h_binOfs[groupID + 1];
+	compute_sd_group <HASHTABLESIZ_64> << <num_blocks, num_threads >> > (
+		_d_A.csrRowPtr, _d_A.csrColIdx, _d_A.csrVal,
+		_d_B.csrRowPtr, _d_B.csrColIdx, _d_B.csrVal,
+		_d_SDRowIdx + beginLoc, endLoc - beginLoc,
+		_d_htIdxPool + beginLoc, _d_htValPool + beginLoc,
+		_d_htOffset + beginLoc, _d_htValidLen + beginLoc);
+	// Group 2: size HASHTABLESIZ_128
+	groupID = 2;
+	num_blocks = 100;
+	num_threads = 256;
+	beginLoc = _h_binOfs[groupID], endLoc = _h_binOfs[groupID + 1];
+	compute_sd_group <HASHTABLESIZ_128> << <num_blocks, num_threads >> > (
+		_d_A.csrRowPtr, _d_A.csrColIdx, _d_A.csrVal,
+		_d_B.csrRowPtr, _d_B.csrColIdx, _d_B.csrVal,
+		_d_SDRowIdx + beginLoc, endLoc - beginLoc,
+		_d_htIdxPool + beginLoc, _d_htValPool + beginLoc,
+		_d_htOffset + beginLoc, _d_htValidLen + beginLoc);
+	// Group 3: size HASHTABLESIZ_256
+	groupID = 3;
+	num_blocks = 100;
+	num_threads = 256;
+	beginLoc = _h_binOfs[groupID], endLoc = _h_binOfs[groupID + 1];
+	compute_sd_group <HASHTABLESIZ_256> << <num_blocks, num_threads >> > (
+		_d_A.csrRowPtr, _d_A.csrColIdx, _d_A.csrVal,
+		_d_B.csrRowPtr, _d_B.csrColIdx, _d_B.csrVal,
+		_d_SDRowIdx + beginLoc, endLoc - beginLoc,
+		_d_htIdxPool + beginLoc, _d_htValPool + beginLoc,
+		_d_htOffset + beginLoc, _d_htValidLen + beginLoc);
+	// Group 4: size HASHTABLESIZ_512
+	groupID = 4;
+	num_blocks = 100;
+	num_threads = 256;
+	beginLoc = _h_binOfs[groupID], endLoc = _h_binOfs[groupID + 1];
+	compute_sd_group <HASHTABLESIZ_512> << <num_blocks, num_threads >> > (
+		_d_A.csrRowPtr, _d_A.csrColIdx, _d_A.csrVal,
+		_d_B.csrRowPtr, _d_B.csrColIdx, _d_B.csrVal,
+		_d_SDRowIdx + beginLoc, endLoc - beginLoc,
+		_d_htIdxPool + beginLoc, _d_htValPool + beginLoc,
+		_d_htOffset + beginLoc, _d_htValidLen + beginLoc);
+	// Group 5: size HASHTABLESIZ_1024
+	groupID = 5;
+	num_blocks = 100;
+	num_threads = 256;
+	beginLoc = _h_binOfs[groupID], endLoc = _h_binOfs[groupID + 1];
+	compute_sd_group <HASHTABLESIZ_1024> << <num_blocks, num_threads >> > (
+		_d_A.csrRowPtr, _d_A.csrColIdx, _d_A.csrVal,
+		_d_B.csrRowPtr, _d_B.csrColIdx, _d_B.csrVal,
+		_d_SDRowIdx + beginLoc, endLoc - beginLoc,
+		_d_htIdxPool + beginLoc, _d_htValPool + beginLoc,
+		_d_htOffset + beginLoc, _d_htValidLen + beginLoc);
 	// You can add other groups here
 
 // Kernel end
+
 	kernelBarrier();
 
 	cudaError_t cuErr = cudaGetLastError();
@@ -569,6 +640,7 @@ int scsparse::analyse()
 	for (int i = 0; i < _n; i++)
 		a_nnzRowA[i] = _h_A.csrRowPtr[i + 1] - _h_A.csrRowPtr[i];
 	double a_avgRowNnzA = _h_A.nnz * 1.0 / _n;
+	int a_nnzA = _h_A.nnz;
 
 	int *a_nnzRowCt = _h_nnzRowCt;
 	double a_avgRowNnzCt = _nnzCt * 1.0 / _n;
@@ -581,12 +653,36 @@ int scsparse::analyse()
 	int a_nnzC = _h_C.nnz;
 
 	//------------ANA_BEGIN-------------------
+	double *a_compress_RowC = (double*)malloc(_n * sizeof(double));
+	double a_compressC = 0, a_avgCompressC = 0;
+	double a_variance_nnzA = 0, a_variance_nnzCt = 0, a_variance_nnzC = 0, a_variance_compress = 0;
+	for (int i = 0; i<_n; i++) {
+		a_compress_RowC[i] = a_nnzRowC[i] * 1.0 / a_nnzRowCt[i];
+		a_compressC += a_compress_RowC[i];
+		a_variance_nnzA += pow((a_nnzRowA[i] - a_avgRowNnzA), 2.0);
+		a_variance_nnzCt = pow((a_nnzRowCt[i] - a_avgRowNnzCt), 2.0);
+		a_variance_nnzC = pow((a_nnzRowC[i] - a_avgRowNnzC), 2.0);
+	}
+	a_avgCompressC = a_compressC / _n;
+	a_variance_nnzA /= _n;
+	a_variance_nnzCt /= _n;
+	a_variance_nnzC /= _n;
+	for (int i = 0; i < _n; i++) a_variance_compress += pow((a_compress_RowC[i] - a_avgCompressC), 2.0);
+	a_variance_compress /= _n;
 
+	std::string a_fileName = _matName + ".txt";
+	FILE *fp = fopen(a_fileName.c_str(), "w+");
+	fprintf(fp, "%.2f %d %.2f\n%.2f %d %.2f\n%.2f %d %.2f\n%.6f %.6f\n",
+		a_avgRowNnzA, a_nnzA, a_variance_nnzA,
+		a_avgRowNnzCt, a_nnzCt, a_variance_nnzCt,
+		a_avgRowNnzC, a_nnzC, a_variance_nnzC,
+		a_avgCompressC, a_variance_compress);
+	for (int d = 0; d < _n; d++)
+		fprintf(fp, "%d %d %d %.4f\n", a_nnzRowA[d], a_nnzRowCt[d], a_nnzRowC[d], a_compress_RowC[d]);
 
-
+	free(a_compress_RowC);
 	//-------------ANA_END--------------------
 	
-
 	free(a_nnzRowA);
 	free(a_nnzRowC);
 	return 0;

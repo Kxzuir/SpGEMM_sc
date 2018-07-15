@@ -46,8 +46,14 @@ public:
 		nnz(_nnz), csrRowPtr(_csrRowPtr), csrColIdx(_csrColIdx), csrVal(_csrVal) {}
 };
 
+#define HASHBINNUM 6
+#define HASHTABLESIZ_32 32
+#define HASHTABLESIZ_64 64
+#define HASHTABLESIZ_128 128
+#define HASHTABLESIZ_256 256
+#define HASHTABLESIZ_512 512
+#define HASHTABLESIZ_1024 1024
 
-#define HASHTABLESIZ 512
 #define ALPHA_COEFFICIENT 1
 
 #define INVALIDHASHIDX INT_MAX
@@ -106,11 +112,11 @@ Optimize CDGroup speed by rewritten bitonic sort kernel
 Split CDGroup kernels again (practice proves that v2.5 is a bad try)
 
 v2.6
-Add dynamic-size hash table support for SDGroup
+Add dynamic-sized hash table support for SDGroup
 Add falldown mechanism for SDGroup rows (fall into CDGroup)
 Add memory management
 Add warmup function
-Code struct reconstruct
+Code structure reconstruction
 
 v2.7
 Add support for 32-bit floating-point computation
@@ -120,9 +126,13 @@ v2.7.1
 Support alpha coefficient adjustment
 
 v2.7.2
-Add struct code for analysis
+Add structured code for analysis
 Cross-platform work
 
 v2.7.3
 Upgraded to CUDA 9.2
+
+v2.8
+Apply dynamic-sized hash table strategy for SDGroup
+
 */
